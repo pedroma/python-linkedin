@@ -24,7 +24,7 @@ from HTMLParser import HTMLParser
 from xml.dom import minidom
 from xml.etree.ElementTree import parse
 
-from models import Profile, Update
+from model import Profile, Update
 
 class Stripper(HTMLParser):
     """
@@ -166,6 +166,8 @@ class LinkedIn(object):
 
         self._request_token = self._get_value_from_raw_qs("oauth_token", response)
         self._request_token_secret = self._get_value_from_raw_qs("oauth_token_secret", response)
+        #TODO: Must catch the OAuthErrors instead of just return True
+        return True
 
     def access_token(self, request_token = None, request_token_secret = None, verifier = None):
         """
@@ -208,6 +210,8 @@ class LinkedIn(object):
 
         self._access_token = self._get_value_from_raw_qs("oauth_token", response)
         self._access_token_secret = self._get_value_from_raw_qs("oauth_token_secret", response)
+        #TODO: Must catch the OAuthErrors instead of just return True
+        return True
 
     def get_profile(self, member_id = None, url = None, fields=()):
         """
@@ -256,7 +260,7 @@ class LinkedIn(object):
         """
         Gets all updates relative to the authenticated user
         """
-        if (not self.access_token) or (not self.access_token_secret):
+        if (not self._access_token) or (not self._access_token_secret):
             self.error = "You do not have an access token. Plase perform 'accessToken()' method first."
             raise OAuthError(self.error)
 
