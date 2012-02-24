@@ -1,6 +1,5 @@
 import datetime
 
-from xml.dom import minidom
 from xml.sax.saxutils import unescape
 
 def get_child(node, tagName):
@@ -43,7 +42,7 @@ def parse_connections(connections_node):
     return connections_list
 
 class LinkedInModel:
-    
+
     def __repr__(self):
         d = {}
         for x,y in self.__dict__.items():
@@ -51,7 +50,7 @@ class LinkedInModel:
                 d[x] = y
         return (self.__module__ + "." + self.__class__.__name__ + " " +
                 d.__repr__())
-        
+
 class Publication(LinkedInModel):
 
     def __init__(self):
@@ -87,7 +86,7 @@ class Publication(LinkedInModel):
         publisher = node.getElementsByTagName("publisher")
         if publisher:
             publication.publisher_name = get_child(publisher[0], "name")
-        
+
         date = node.getElementsByTagName("date")
         if date:
             publication.date = parse_date(date[0])
@@ -140,7 +139,7 @@ class Education(LinkedInModel):
         self.activities  = None
         self.notes       = None
         self.field_of_study = None
-        
+
     @staticmethod
     def create(node):
         """
@@ -172,14 +171,14 @@ class Education(LinkedInModel):
             start_date = child.getElementsByTagName("start-date")
             if start_date:
                 education.start_date = parse_date(start_date[0])
-                
+
             end_date = child.getElementsByTagName("end-date")
             if end_date:
                 education.end_date = parse_date(end_date[0])
 
-            result.append(education)            
+            result.append(education)
         return result
-    
+
     def _get_child(self, node, tagName):
         try:
             domNode = node.getElementsByTagName(tagName)[0]
@@ -202,7 +201,7 @@ class Position(LinkedInModel):
         self.end_date   = None
         self.company    = None
         self.is_current = None
-        
+
 
     @staticmethod
     def create(node):
@@ -240,12 +239,12 @@ class Position(LinkedInModel):
             position.end_date = parse_date(end_date[0])
 
         return position
-        
+
 class Location(LinkedInModel):
     def __init__(self):
         self.name = None
         self.country_code = None
-        
+
     @staticmethod
     def create(node):
         """
@@ -262,15 +261,15 @@ class Location(LinkedInModel):
         if country:
             country = country[0]
             loc.country_code = get_child(country, "code")
-            
+
         return loc
-    
+
 class RelationToViewer(LinkedInModel):
     def __init__(self):
         self.distance = None
         self.num_related_connections = None
         self.connections = []
-        
+
     @classmethod
     def create(cls, node):
         """
@@ -290,7 +289,7 @@ class RelationToViewer(LinkedInModel):
         relation = RelationToViewer()
         relation.distance = int(get_child(node, "distance"))
         relation.num_related_connections = int(get_child(node, "num-related-connections"))
-        
+
         connections = node.getElementsByTagName("connections")
         if connections:
             connections = connections[0]
@@ -299,9 +298,9 @@ class RelationToViewer(LinkedInModel):
                     relation.num_related_connections = int(connections.attributes["total"].value)
 
             relation.connections = parse_connections(connections)
-                    
+
         return relation
-    
+
 class Profile(LinkedInModel):
     """
     Wraps the data which comes from Profile API of LinkedIn.
@@ -335,7 +334,7 @@ class Profile(LinkedInModel):
         self.positions   = []
         self.educations  = []
         self.xml_string  = None
-        
+
     @staticmethod
     def create(node, debug=False):
         person = node
@@ -429,3 +428,192 @@ class Profile(LinkedInModel):
         if url:
             return unescape(url)
         return url
+
+class CONN(object):
+    """
+    CONN updates contain a update-content/connections node that describe the member that was recently connected to. update-content/person indicates the first degree connection making the new connection.
+    "John Irving is now connected to Paul Auster."
+    """
+    def __init__(self):
+        self.person1_name = None # first name + last name
+        self.person1_id = None
+        self.person1_public_url = None
+        self.person1_headline = None
+        self.person2_name = None
+        self.person2_id = None
+        self.person2_public_url = None
+        self.person2_headline = None
+
+    @staticmethod
+    def create(xml_element):
+        content = xml_element.find("person")
+        update = CONN()
+        update.person1_name = "%s %s"%(content.find("first-name").text,content.find("last-name").text)
+        update.person1_id = "%s"%content.find("id").text
+        update.person1_public_url = "%s"%content.find("site-standard-profile-request").find("url").text
+        update.person1_headline = "%s"%content.find("headline").text
+        person2 = content.find("connections").find("person")
+        update.person2_name = "%s %s"%(person2.find("first-name").text,person2.find("last-name").text)
+        update.person2_id = "%s"%person2.find("id").text
+        update.person2_public_url = "%s"%person2.find("site-standard-profile-request").find("url").text
+        update.person2_headline = "%s"%person2.find("headline").text
+        return update
+
+    def __str__(self):
+        return "%s is now connected to %s" % (self.person1_name.encode('utf8'),self.person2_name.encode('utf8'))
+
+
+class NCON(object):
+    """
+    NCON updates contain a update-content/person node describing the member who recently became a connection to the requestor.
+    "John Irving is now a connection."
+    """
+    def __init__(self):
+        self.person_name = None # first name + last name
+        self.person_id = None
+        self.person_public_url = None
+        self.person_headline = None
+
+    @staticmethod
+    def create(xml_element):
+        content = xml_element.find("person")
+        update = NCON()
+        update.person_name = "%s %s"%(content.find("first-name").text,content.find("last-name").text)
+        update.person_id = "%s"%content.find("id").text
+        update.person_public_url = "%s"%content.find("site-standard-profile-request").find("url").text
+        update.person_headline = "%s"%content.find("headline").text
+        return update
+
+    def __str__(self):
+        return "%s is now a connection."%self.person_name.encode('utf8')
+
+class CCEM(object):
+    """
+    CCEM updates are infrequent updates where the requestor has someone in their uploaded address book who has just recently became a member of LinkedIn. They aren't necessarily connected to this individual yet, but it is likely they'll want to connect. The update-content/person node in this update indicates the recent LinkedIn member.
+    "Gertrude Stein has joined LinkedIn."
+    """
+    def __init__(self):
+        self.person_name = None # first name + last name
+        self.person_id = None
+        self.person_public_url = None
+        self.person_headline = None
+
+    @staticmethod
+    def create(xml_element):
+        content = xml_element.find("person")
+        update = CCEM()
+        update.person_name = "%s %s"%(content.find("first-name").text,content.find("last-name").text)
+        update.person_id = "%s"%content.find("id").text
+        update.person_public_url = "%s"%content.find("site-standard-profile-request").find("url").text
+        update.person_headline = "%s"%content.find("headline").text
+        return update
+
+    def __str__(self):
+        return "%s has joined LinkedIn"%self.person_name.encode('utf8')
+
+class SHAR(object):
+    """
+    Share updates are generated when a member shares or reshares an item. Shares are a more sophisticated form of status updates. They can contain text, but also an optional URL and photo. In general, you should expect at least a comment or a URL, or both, but neither one is mandatory if the other is provided.
+    """
+    def __init__(self):
+        self.sharer_name = None
+        self.sharer_id = None
+        self.sharer_headline = None
+        self.sharer_public_url = None
+        self.original_sharer_name = None
+        self.original_sharer_id = None
+        self.original_sharer_headline = None
+        self.share_id = None
+        self.share_timestamp = None
+        self.share_comment = None
+        self.share_content_url = None
+        self.share_content_title = None
+        self.share_service_provider = None
+        self.share_application = None
+        self.share_pic_url = None
+
+    @staticmethod
+    def create(xml_element):
+        content = xml_element.find("person")
+        update = SHAR()
+        update.sharer_name = "%s %s"%(content.find("first-name").text,content.find("last-name").text)
+        update.sharer_id = "%s"%content.find("id").text
+        update.sharer_public_url = "%s"%content.find("site-standard-profile-request").find("url").text
+        update.sharer_headline = "%s"%content.find("headline").text
+        update.share_pic_url = "%s"%content.find("picture-url").text
+        cur_share = content.find("current-share")
+        update.original_sharer_name = "%s %s"%(cur_share.find("author").find("first-name").text,cur_share.find("author").find("last-name").text)
+        update.original_sharer_id = "%s"%cur_share.find("author").find("id").text
+        update.original_sharer_headline = "%s"%cur_share.find("author").find("headline").text
+        update.share_id = "%s"%cur_share.find("id").text
+        update.share_timestamp = "%s"%cur_share.find("timestamp").text
+        update.share_comment = "%s"%cur_share.find("comment").text
+        update.share_content_url = "%s"%cur_share.find("content").find("submitted-url").text
+        update.share_content_title = "%s"%cur_share.find("content").find("title").text
+        update.share_service_provider = "%s"%cur_share.find("source").find("service-provider").find("name").text
+        update.share_application = "%s"%cur_share.find("source").find("application").find("name").text
+        return update
+
+    def __str__(self):
+        share = self.share_pic_url if self.share_pic_url != '' and self.share_pic_url is not None else self.share_content_url
+        return "%s shared %s. Originally shared by %s"%(self.sharer_name.encode('utf8'),share,self.original_sharer.encode('utf8'))
+
+class STAT(object):
+    """
+    Status Updates are the result of first degree connections setting their status. While update-content/person will (as always) tell you about the member who made the update, update-content/person/current-status will contain the actual string the member has their status updated to. These strings will frequently contain URLs and are frequently HTML entity-encoded.
+    "Taylor Singletary helping developers http://developers.linkedin.com"
+    """
+    def __init__(self):
+        self.person_name = None
+        self.person_id = None
+        self.person_headline = None
+        self.person_public_url = None
+        self.current_status = None
+
+    @staticmethod
+    def create(xml_element):
+        content = xml_element.find("person")
+        update = STAT()
+        update.person_name = "%s %s"%(content.find("first-name").text,content.find("last-name").text)
+        update.person_id = "%s"%content.find("id").text
+        headline = content.find("headline")
+        update.person_headline = "%s"%(headline.text if headline is not None else '')
+        profile_request = content.find("site-standard-profile-request")
+        update.person_public_url = "%s"%(profile_request.find("url").text if profile_request is not None else '')
+        status = content.find("current-status")
+        update.current_status = "%s"%(status.text if status is not None else '')
+        return update
+
+    def __str__(self):
+        return "%s %s"%(self.person_name.encode('utf8'), self.current_status.encode('utf8'))
+
+#class VIRL(object):
+#    """
+#    Viral updates include comments and likes.
+#    """
+
+class Update(object):
+    def __init__(self):
+        self.timestamp = None
+        self.is_commentable = None
+        self.update_type = None
+        self.num_likes = None
+        self.update = None
+
+    @staticmethod
+    def create(xml_element,update_type):
+        update = Update()
+        update.update_type = update_type
+        update.timestamp = xml_element.find("timestamp").text
+        update.is_commentable = False if xml_element.find("is-commentable").text == 'false' else True
+        update.num_likes = "" if xml_element.find("num-likes") is None else xml_element.find("num-likes").text
+        content = xml_element.find("update-content")
+        up = globals().get(update_type,None)
+        if up is not None:
+            update.update = up.create(content)
+        return update
+
+    def message(self):
+        return str(self.update)
+
+

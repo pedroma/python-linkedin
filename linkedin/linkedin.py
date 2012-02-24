@@ -21,8 +21,10 @@ except DeprecationWarning, derr:
 
 import urllib, time, random, httplib, hmac, binascii, cgi, string
 from HTMLParser import HTMLParser
+from xml.dom import minidom
+from xml.etree.ElementTree import parse
 
-from model import *
+from models import Profile, Update
 
 class Stripper(HTMLParser):
     """
@@ -35,7 +37,7 @@ class Stripper(HTMLParser):
 
     def handle_data(self, d):
         self.fed.append(d)
-    
+
     def getAlteredData(self):
         return ''.join(self.fed)
 
@@ -74,7 +76,7 @@ class XMLBuilder(object):
 class LinkedinError(Exception):
     def __init__(self, error):
         self._error = error
-    
+
     def __str__(self):
         return repr(self._error)
 
@@ -84,10 +86,10 @@ class OAuthError(LinkedinError):
     """
     def __init__(self, value):
         self.parameter = value
-        
+
     def __str__(self):
         return repr(self.parameter)
-    
+
 
 class LinkedIn(object):
     def __init__(self, api_key, api_secret, callback_url, gae = False):
@@ -110,7 +112,7 @@ class LinkedIn(object):
         Please take a look at the link below if you have a basic knowledge of HTTP protocol
         - http://developer.linkedin.com/docs/DOC-1008
 
-        
+
         Please create an application from the link below if you do not have an API key and secret key yet.
         - https://www.linkedin.com/secure/developer
         @api_key:    Your API key
@@ -121,19 +123,19 @@ class LinkedIn(object):
         self.API_ENDPOINT      = "api.linkedin.com"
         self.BASE_URL          = "https://%s" % self.API_ENDPOINT
         self.VERSION           = "1.0"
-        
+
         self._api_key       = api_key
         self._api_secret    = api_secret
         self._callback_url  = callback_url
         self._gae = gae # Is it google app engine
         self._request_token = None # that comes later
         self._access_token  = None # that comes later and later
-        
+
         self._request_token_secret = None
         self._access_token_secret  = None
-        
+
         self._verifier = None
-        
+
         self._debug = False
 
     def request_token(self):
@@ -151,13 +153,13 @@ class LinkedIn(object):
 
         method = "GET"
         relative_url = "/uas/oauth/requestToken"
-        
+
         query_dict = self._query_dict({"oauth_callback" : self._callback_url})
-        
+
         self._calc_signature(self._get_url(relative_url), query_dict, self._request_token_secret, method)
 
         response = self._https_connection(method, relative_url, query_dict)
-        
+
         oauth_problem = self._get_value_from_raw_qs("oauth_problem", response)
         if oauth_problem:
             raise OAuthError(oauth_problem)
@@ -188,7 +190,7 @@ class LinkedIn(object):
 
         if self._verifier is None:
             raise OAuthError("There is no Verifier Key. Please perform 'request_token' method, redirect user to API authorize page and get the verifier.")
-        
+
         method = "GET"
         relative_url = "/uas/oauth/accessToken"
         query_dict = self._query_dict({
@@ -216,12 +218,12 @@ class LinkedIn(object):
         The argument 'fields' determines how much information will be fetched.
 
         Examples:
-        client.get_profile(merber_id = 123, url = None, fields=['first-name', 'last-name']) : fetches the profile of a user whose id is 123. 
+        client.get_profile(merber_id = 123, url = None, fields=['first-name', 'last-name']) : fetches the profile of a user whose id is 123.
 
         client.get_profile(merber_id = None, url = None, fields=['first-name', 'last-name']) : fetches current user's profile
 
         client.get_profile(member_id = None, 'http://www.linkedin.com/in/ozgurv') : fetches the profile of a  user whose profile url is http://www.linkedin.com/in/ozgurv
-        
+
         @ Returns Profile instance
         """
         # specify the url according to the parameters given
@@ -236,19 +238,49 @@ class LinkedIn(object):
             fields = ":(%s)" % ",".join(fields) if len(fields) > 0 else None
             if fields:
                 raw_url = raw_url + fields
-                
+
         return self.get_profile_raw(raw_url)
-    
+
     def get_profile_raw(self, raw_url, params=None):
         """
         Use the profile API of linked in. Just append the raw_url string to the v1/people/ url
         and the dictionary params as parameters for the GET request
         """
-        
+
         self._check_tokens()
-        
+
         response = self._do_normal_query("/v1/people/" + raw_url, params=params)
         return Profile.create(minidom.parseString(response), self._debug)
+
+    def get_updates(self):
+        """
+        Gets all updates relative to the authenticated user
+        """
+        if (not self.access_token) or (not self.access_token_secret):
+            self.error = "You do not have an access token. Plase perform 'accessToken()' method first."
+            raise OAuthError(self.error)
+
+        raw_url = "/v1/people/"
+        raw_url = raw_url + "~/network/updates"
+
+        response = self._do_normal_query(raw_url)
+        error = self._parse_error(response)
+        if error:
+            self.error = error
+            return None
+
+        from StringIO import StringIO
+        content = StringIO(response)
+        document = parse(content)
+        updates = document.getroot()
+        result = []
+        for update in updates:
+            update_type = update.find("update-type").text
+            up = Update.create(update,update_type)
+            if up is not None:
+                result.append(up)
+
+        return result
 
     def get_connections(self, member_id = None, public_url = None, fields=()):
         """
@@ -262,7 +294,7 @@ class LinkedIn(object):
         * http://api.linkedin.com/v1/people/url=http%3A%2F%2Fwww.linkedin.com%2Fin%2Flbeebe/connections (fetch with public_url)
         """
         self._check_tokens()
-        
+
         raw_url = "/v1/people/%s/connections"
         if member_id:
             raw_url = raw_url % ("id=" + member_id)
@@ -290,27 +322,27 @@ class LinkedIn(object):
         Use the People Search API to find LinkedIn profiles using keywords,
         company, name, or other methods. This returns search results,
         which are an array of matching member profiles.
-        
+
         You can specify the fields you want to see using the field list (:people...)
 
         Request URL Structure:
         http://api.linkedin.com/v1/people-search[:(people:(id,first-name,last-name,headline,connections,positions,picture-url,public-profile-url))]?first-name=[first name]&last-name=[last name] ...
-        
+
         To learn more refer to https://developer.linkedin.com/documents/people-search-api .
-        
+
         Note that the search API was deprecated a while ago and replaced by the people-search API. The result structure changes slightly because people-search returns the entire response in a new people-search tag.
-        
-        people-search returns a slightly different structure -- 
-        
+
+        people-search returns a slightly different structure --
+
         search returned..
-        
+
         <people>
           <person/>
           <person/>
           ...
           <person/>
-        </people> 
-        
+        </people>
+
         but people_search returns
         <people-search>
             <people>
@@ -320,10 +352,10 @@ class LinkedIn(object):
                 <person/>
             </people>
         </people_search>
-        
-        So users will have to update their code to reflect this new structure.                 
+
+        So users will have to update their code to reflect this new structure.
         """
-        
+
         self._check_tokens()
         fields = ":(people:(id,first-name,last-name,headline,positions,public-profile-url,picture-url,location:(name)))"
         response = self._do_normal_query("/v1/people-search" + fields, params=parameters)
@@ -331,7 +363,7 @@ class LinkedIn(object):
         error = self._parse_error(response)
         if error:
             self._error = error
-            logging.error("Parsing Error")
+            #logging.error("Parsing Error")
             return None
 
         # Parse the response and list out all of the Person elements
@@ -358,7 +390,7 @@ class LinkedIn(object):
         Returns True if successfully sends the message otherwise returns False.
 
         Important Note: You can send a message at most 10 connections at one time.
-        
+
         Technical Explanation:
         ---------------------
         Sends a POST request to the URL 'http://api.linkedin.com/v1/people/~/mailbox'.
@@ -392,7 +424,7 @@ class LinkedIn(object):
         #######################################################################################
 
         if not ids: ids = []
-        
+
         self._check_tokens()
 
         # Shorten the list.
@@ -400,7 +432,7 @@ class LinkedIn(object):
         if send_yourself:
             ids = ids[:9]
             ids.append("~")
-            
+
         subjectStripper = Stripper()
         subjectStripper.feed(subject)
         subject = subjectStripper.getAlteredData()
@@ -424,7 +456,7 @@ class LinkedIn(object):
         builder.append_element_to_root(subject_element)
         builder.append_element_to_root(body_element)
         body = builder.xml()
-        
+
         self._do_normal_query("/v1/people/~/mailbox", body=body, method="POST")
 
     def send_invitation(self, subject, message, first_name, last_name, email):
@@ -434,16 +466,16 @@ class LinkedIn(object):
         @input: string x string x string x string x string
         @output: bool
         """
-        
+
         #########################################################################################
         # What we do here is first, we need to check the access token.                          #
         # Then we need to strip HTML tags using the HTMLParser library.                         #
         # Then we are going to build up the XML body and post the request.                      #
         # According to the response parsed, we return True or False.                            #
         #########################################################################################
-        
+
         self._check_tokens()
-        
+
         subjectStripper = Stripper()
         subjectStripper.feed(subject)
         subject = subjectStripper.getAlteredData()
@@ -470,8 +502,8 @@ class LinkedIn(object):
         connect_type_element = builder.create_element_with_text_node("connect-type", "friend")
         invitation_request_element.appendChild(connect_type_element)
         item_content_element.appendChild(invitation_request_element)
-        
-        
+
+
         builder.append_element_to_root(recipients_element)
         builder.append_element_to_root(subject_element)
         builder.append_element_to_root(body_element)
@@ -482,8 +514,8 @@ class LinkedIn(object):
 
     def set_status(self, status_message):
         """
-        This API is deprecated and should be replaced with the share status of linkedin 
-        
+        This API is deprecated and should be replaced with the share status of linkedin
+
         Issues a status of the connected user. There is a 140 character limit on status message.
         If it is longer than 140 characters, it is shortened.
         -----------
@@ -506,13 +538,13 @@ class LinkedIn(object):
         status_node = builder.document.createTextNode(status_message)
         builder.root.appendChild(status_node)
         body = builder.xml()
-        
+
         self._do_normal_query("/v1/people/~/current-status", body=body, method="PUT")
-        
+
     def clear_status(self):
         """
         This API is deprecated and should be replaced with the share status of linkedin
-        
+
         Clears the status of the connected user.
         -----------
         Usage Rules
@@ -525,7 +557,7 @@ class LinkedIn(object):
         self._check_tokens()
 
         self._do_normal_query("/v1/people/~/current-status", method="DELETE")
-    
+
     def share_update(self, comment=None, title=None, submitted_url=None,
                     submitted_image_url=None, description=None,
                     visibility="connections-only"):
@@ -540,7 +572,7 @@ class LinkedIn(object):
 
         @output: bool
 
-        SAMPLE 
+        SAMPLE
             <?xml VERSION="1.0" encoding="UTF-8"?>
             <share>
               <comment>83% of employers will use social media to hire: 78% LinkedIn, 55% Facebook, 45% Twitter [SF Biz Times] http://bit.ly/cCpeOD</comment>
@@ -609,7 +641,7 @@ class LinkedIn(object):
 
         builder.append_element_to_root(visibility_element)
 
-        body = builder.xml()        
+        body = builder.xml()
 
         self._do_normal_query("/v1/people/~/shares", body=body, method="POST")
 
@@ -621,7 +653,7 @@ class LinkedIn(object):
 
     def set_debug(self, debug):
         self._debug = debug
-    
+
     def clear(self):
         self._request_token = None
         self._access_token  = None
@@ -629,21 +661,21 @@ class LinkedIn(object):
 
         self._request_token_secret = None
         self._access_token_secret = None
-        
+
     #################################################
     # HELPER FUNCTIONS                              #
     # You do not explicitly use those methods below #
     #################################################
-    
+
     def _generate_nonce(self, length = 20):
         return ''.join([string.letters[random.randint(0, len(string.letters) - 1)] for i in range(length)])
 
     def _get_url(self, relative_path):
         return self.BASE_URL + relative_path
-    
+
     def _generate_timestamp(self):
         return str(int(time.time()))
-    
+
     def _quote(self, st):
         return urllib.quote(st, safe='~')
 
@@ -665,7 +697,7 @@ class LinkedIn(object):
 
     def _signature_base_string(self, method, uri, query_dict):
         return "&".join([self._quote(method), self._quote(uri), self._quote(self._urlencode(query_dict))])
-        
+
     def _parse_error(self, str_as_xml):
         """
         Helper function in order to get error message from an xml string.
@@ -680,7 +712,7 @@ class LinkedIn(object):
         """
         try:
             xmlDocument = minidom.parseString(str_as_xml)
-            if len(xmlDocument.getElementsByTagName("error")) > 0: 
+            if len(xmlDocument.getElementsByTagName("error")) > 0:
                 error = xmlDocument.getElementsByTagName("message")
                 if error:
                     error = error[0]
@@ -689,16 +721,16 @@ class LinkedIn(object):
         except OAuthError, detail:
 #            raise detail
             raise OAuthError("Invalid XML String given: error: %s" % repr(detail))
-        
+
     def _create_oauth_header(self, query_dict):
         header = 'OAuth realm="http://api.linkedin.com", '
         header += ", ".join(['%s="%s"' % (k, self._quote(query_dict[k]))
                            for k in sorted(query_dict)])
         return header
-    
+
     def _query_dict(self, additional = None):
         if not additional: additional = {}
-        
+
         query_dict = {"oauth_consumer_key": self._api_key,
                       "oauth_nonce": self._generate_nonce(),
                       "oauth_signature_method": "HMAC-SHA1",
@@ -707,28 +739,28 @@ class LinkedIn(object):
         }
         query_dict.update(additional)
         return query_dict
-    
+
     def _do_normal_query(self, relative_url, body=None, method="GET", params=None):
         method = method
         query_dict = self._query_dict({"oauth_token" : self._access_token})
         signature_dict = dict(query_dict)
-        
+
         if params:
             signature_dict.update(params)
-            
+
         query_dict["oauth_signature"] = self._calc_signature(self._get_url(relative_url),
                                     signature_dict, self._access_token_secret, method, update=False)
-        
+
         if params:
             relative_url = "%s?%s" % (relative_url, self._urlencode(params))
-        
+
         response = self._https_connection(method, relative_url, query_dict, body)
-        
+
         if response:
             error = self._parse_error(response)
             if error:
                 raise LinkedinError(error)
-        
+
         return response
 
     def _check_tokens(self):
@@ -751,13 +783,13 @@ class LinkedIn(object):
         if update:
             query_dict["oauth_signature"] = signature
         return signature
-        
+
     def _https_connection(self, method, relative_url, query_dict, body=None):
         if self._gae:
             return self._https_connection_gae(method, relative_url, query_dict, body)
         else:
             return self._https_connection_regular(method, relative_url, query_dict, body)
-    
+
     def _https_connection_regular(self, method, relative_url, query_dict, body = None):
         header = self._create_oauth_header(query_dict)
         connection = None
@@ -766,14 +798,14 @@ class LinkedIn(object):
             connection.request(method, relative_url, body = body,
                                headers={'Authorization':header})
             response = connection.getresponse()
-            
+
             if response is None:
                 raise LinkedinError("No HTTP response received.")
             return response.read()
         finally:
             if connection:
                 connection.close()
-    
+
     def _https_connection_gae(self, method, relative_url, query_dict, body = None):
         from google.appengine.api import urlfetch
         if method == "GET":
@@ -784,20 +816,20 @@ class LinkedIn(object):
             method = urlfetch.PUT
         elif method == "DELETE":
             method = urlfetch.DELETE
-        
+
         header = self._create_oauth_header(query_dict)
         headers = {'Authorization':header}
         if (body):
             headers["Content-Type"] = "text/xml"
-        
+
         url = self._get_url(relative_url)
 
         rpc = urlfetch.create_rpc(deadline=10.0)
         urlfetch.make_fetch_call(rpc, url, method=method, headers=headers,
                              payload=body)
-        
+
         return rpc.get_result().content
-    
+
     ########################
     # END HELPER FUNCTIONS #
     ########################
