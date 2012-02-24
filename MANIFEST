@@ -3,5 +3,4 @@ LICENSE
 setup.py
 linkedin/__init__.py
 linkedin/linkedin.py
-linkedin/helper.py
 linkedin/model.py

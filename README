@@ -4,7 +4,7 @@ LinkedIn API for Python
 =======================
   This package provides a pure python interface for the LinkedIn Connection and Profile APIs.
 
-  Author: `Ozgur Vatansever <ozgurvt@gmail.com>`
+  Original Author: `Ozgur Vatansever <ozgurvt@gmail.com>`
 
   LinkedIn (http://developer.linkedin.com) provides a service that let people bring their LinkedIn profiles
   and networks with them to your site or application via their OAuth based API. This library provides a simple
@@ -16,10 +16,7 @@ INSTALLATION
   You have 2 options:
 
   1) Getting the code from repository:
-     - svn co http...
-
-  2) Getting the code from Google Code website of python-linkedin
-     - wget bla bla..
+     - git clone git://github.com/pedroma/python-linkedin.git
 
   Enter the directory you've just downloaded, and execute the following command on shell to install the package:
   - sudo python setup.py install
@@ -33,20 +30,6 @@ KEYS
 
   KEY = wFNJekVpDCJtRPFX812pQsJee-gt0zO4X5XmG6wcfSOSlLocxodAXNMbl0_hw3Vl
   SECRET = daJDa6_8UcnGMw1yuq9TjoO_PMKukXMo8vEMo7Qv5J-G3SPgrAV0FqFCd0TNjQyG
-
-QUICK USAGE FROM INTERPRETER
-============================
-
-  For testing the library using an interpreter, use the quick helper.
-  
-  from linkedin import helper
-  
-  api = helper.quick_api(KEY, SECRET)
-  
-  This will print a url to the screen. Go into this URL using a browser, after you login, the method will return with an api object you can now use.
-  
-  api.get_profile() etc...
-  
 
 BASIC USAGE
 ===========
