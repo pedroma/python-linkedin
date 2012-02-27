@@ -455,8 +455,13 @@ class CONN(object):
         person2 = content.find("connections").find("person")
         update.person2_name = "%s %s"%(person2.find("first-name").text,person2.find("last-name").text)
         update.person2_id = "%s"%person2.find("id").text
-        update.person2_public_url = "%s"%person2.find("site-standard-profile-request").find("url").text
-        update.person2_headline = "%s"%person2.find("headline").text
+        #TODO: This try, catch needs to be handled better
+        try:
+            update.person2_public_url = "%s"%person2.find("site-standard-profile-request").find("url").text
+            update.person2_headline = "%s"%person2.find("headline").text
+        except:
+            update.person2_public_url = ""
+            update.person2_headline = ""
         return update
 
     def __str__(self):
