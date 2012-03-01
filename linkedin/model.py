@@ -2,17 +2,29 @@ import datetime
 
 from xml.sax.saxutils import unescape
 
-def get_child(node, tagName):
+def get_child(node, tagName,default=None):
     try:
         domNode = node.getElementsByTagName(tagName)[0]
         childNodes = domNode.childNodes
         if childNodes:
             return childNodes[0].nodeValue
-        return None
+        return default
     except:
-        return None
+        return default
+
+def get_child_xml(node,tag_name,default=None):
+    try:
+        domNode = node.find(tag_name)
+        if domNode is not None:
+            return domNode.text
+        else:
+            return default
+    except:
+        return default
 
 def str_to_bool(s):
+    if s is None:
+        return None
     if s.lower() == "true":
         return True
     elif s.lower() == "false":
@@ -429,6 +441,17 @@ class Profile(LinkedInModel):
             return unescape(url)
         return url
 
+def create_person_attrs(update,person,field="person"):
+    name = "%s %s"%(get_child_xml(person,"first-name"),get_child_xml(person,"last-name"))
+    setattr(update,u"%s_name"%field,name)
+    id = get_child_xml(person,"id",None)
+    setattr(update,"%s_id"%field,id)
+    public_url = get_child_xml(person.find("site-standard-profile-request"),"url")
+    setattr(update,"%s_public_url"%field,public_url)
+    headline = get_child_xml(person,"headline")
+    setattr(update,"%s_headline"%field,headline)
+    return update
+
 class CONN(object):
     """
     CONN updates contain a update-content/connections node that describe the member that was recently connected to. update-content/person indicates the first degree connection making the new connection.
@@ -446,22 +469,11 @@ class CONN(object):
 
     @staticmethod
     def create(xml_element):
-        content = xml_element.find("person")
         update = CONN()
-        update.person1_name = "%s %s"%(content.find("first-name").text,content.find("last-name").text)
-        update.person1_id = "%s"%content.find("id").text
-        update.person1_public_url = "%s"%content.find("site-standard-profile-request").find("url").text
-        update.person1_headline = "%s"%content.find("headline").text
+        content = xml_element.find("person")
+        update = create_person_attrs(update,content,field="person1")
         person2 = content.find("connections").find("person")
-        update.person2_name = "%s %s"%(person2.find("first-name").text,person2.find("last-name").text)
-        update.person2_id = "%s"%person2.find("id").text
-        #TODO: This try, catch needs to be handled better
-        try:
-            update.person2_public_url = "%s"%person2.find("site-standard-profile-request").find("url").text
-            update.person2_headline = "%s"%person2.find("headline").text
-        except:
-            update.person2_public_url = ""
-            update.person2_headline = ""
+        update = create_person_attrs(update,person2,field="person2")
         return update
 
     def __str__(self):
@@ -481,12 +493,9 @@ class NCON(object):
 
     @staticmethod
     def create(xml_element):
-        content = xml_element.find("person")
         update = NCON()
-        update.person_name = "%s %s"%(content.find("first-name").text,content.find("last-name").text)
-        update.person_id = "%s"%content.find("id").text
-        update.person_public_url = "%s"%content.find("site-standard-profile-request").find("url").text
-        update.person_headline = "%s"%content.find("headline").text
+        content = xml_element.find("person")
+        update = create_person_attrs(update,content,field="person1")
         return update
 
     def __str__(self):
@@ -505,12 +514,9 @@ class CCEM(object):
 
     @staticmethod
     def create(xml_element):
-        content = xml_element.find("person")
         update = CCEM()
-        update.person_name = "%s %s"%(content.find("first-name").text,content.find("last-name").text)
-        update.person_id = "%s"%content.find("id").text
-        update.person_public_url = "%s"%content.find("site-standard-profile-request").find("url").text
-        update.person_headline = "%s"%content.find("headline").text
+        content = xml_element.find("person")
+        update = create_person_attrs(update,content,field="person1")
         return update
 
     def __str__(self):
@@ -525,9 +531,11 @@ class SHAR(object):
         self.sharer_id = None
         self.sharer_headline = None
         self.sharer_public_url = None
+
         self.original_sharer_name = None
         self.original_sharer_id = None
         self.original_sharer_headline = None
+
         self.share_id = None
         self.share_timestamp = None
         self.share_comment = None
@@ -539,17 +547,12 @@ class SHAR(object):
 
     @staticmethod
     def create(xml_element):
-        content = xml_element.find("person")
         update = SHAR()
-        update.sharer_name = "%s %s"%(content.find("first-name").text,content.find("last-name").text)
-        update.sharer_id = "%s"%content.find("id").text
-        update.sharer_public_url = "%s"%content.find("site-standard-profile-request").find("url").text
-        update.sharer_headline = "%s"%content.find("headline").text
-        update.share_pic_url = "%s"%content.find("picture-url").text
+        content = xml_element.find("person")
+        update = create_person_attrs(update,content,field="sharer")
+        update.share_pic_url = get_child_xml(content,"picture-url")
         cur_share = content.find("current-share")
-        update.original_sharer_name = "%s %s"%(cur_share.find("author").find("first-name").text,cur_share.find("author").find("last-name").text)
-        update.original_sharer_id = "%s"%cur_share.find("author").find("id").text
-        update.original_sharer_headline = "%s"%cur_share.find("author").find("headline").text
+        update = create_person_attrs(update,cur_share,field="original_sharer")
         update.share_id = "%s"%cur_share.find("id").text
         update.share_timestamp = "%s"%cur_share.find("timestamp").text
         update.share_comment = "%s"%cur_share.find("comment").text
@@ -577,31 +580,106 @@ class STAT(object):
 
     @staticmethod
     def create(xml_element):
-        content = xml_element.find("person")
         update = STAT()
-        update.person_name = "%s %s"%(content.find("first-name").text,content.find("last-name").text)
-        update.person_id = "%s"%content.find("id").text
-        headline = content.find("headline")
-        update.person_headline = "%s"%(headline.text if headline is not None else '')
-        profile_request = content.find("site-standard-profile-request")
-        update.person_public_url = "%s"%(profile_request.find("url").text if profile_request is not None else '')
-        status = content.find("current-status")
-        update.current_status = "%s"%(status.text if status is not None else '')
+        content = xml_element.find("person")
+        update = create_person_attrs(update,content)
+        update.current_status = get_child_xml(content,"current-status")
         return update
 
     def __str__(self):
         return "%s %s"%(self.person_name.encode('utf8'), self.current_status.encode('utf8'))
 
-#class VIRL(object):
-#    """
-#    Viral updates include comments and likes.
-#    """
+class VIRL(object):
+    """
+    Viral updates include comments and likes.
+    """
+    def __init__(self):
+        self.person_name = None
+        self.person_id = None
+        self.person_headline = None
+        self.person_public_url = None
+        self.action_code = None
+        self.original_timestamp = None
+        self.original_update_key = None
+        self.original_update_type = None
+        self.update_person_id = None
+        self.update_person_name = None
+        self.update_person_headline = None
+        self.update_share_id = None
+        self.update_share_timestamp = None
+        self.update_share_visibility_code = None
+        self.update_share_comment = None
+        self.update_share_service_provider_name = None
+        self.update_share_author_id = None
+        self.update_share_author_name = None
+        self.update_share_author_headline = None
+        self.update_person_picture_url = None
+        self.update_person_public_url = None
+
+    @staticmethod
+    def create(xml_element):
+        person = xml_element.find("person")
+        update = VIRL()
+        update.person_name = "%s %s"%(person.find("first-name").text,person.find("last-name").text)
+        update.person_id = "%s"%person.find("id").text
+        update.person_public_url = "%s"%person.find("site-standard-profile-request").find("url").text
+        update.person_headline = "%s"%person.find("headline").text
+        update_action = xml_element.find("update-action")
+        update.action_code = update_action.find("action").find("code").text
+        original_update = update_action.find("original-update")
+        update.original_timestamp = original_update.find("timestamp").text
+        update.original_update_key = original_update.find("update-key").text
+        update.original_update_type = original_update.find("update-type").text
+        update_person = original_update.find("update_content").find("person")
+        update.update_person_id = update_person.find("id").text
+        update.update_person_name = "%s %s"%(update_person.find("first-name").text,update_person.find("last-name").text)
+        update.update_person_headline = "%s"%update_person.find("headline").text
+        update_share = update_person.find("current-share")
+        update.update_share_id = update_share.find("id").text
+        update.update_share_timestamp = update_share.find("timestamp").text
+        update.update_share_visibility_code = update_share.find("visibility").find("code").text
+        update.update_share_comment = update_share.find("comment").text
+        update.update_share_service_provider_name = update_share.find("source").find("service-provider").find("name").text
+        update_share_author = update_share.find("author")
+        update.update_share_author_id = update_share_author.find("id").text
+        update.update_share_author_name = "%s %s"%(update_share_author.find("first-name").text,update_share_author.find("last-name").text)
+        update.update_share_author_headline = update_share_author.find("headline")
+        update.update_person_picture_url = person.find("picture_url").text
+        update.update_person_public_url = person.find("site-standard-profile-request").find("url").text
+        return update
+
+    def __str__(self):
+        return "VIRL update"
+
+
+class JGRP(object):
+    """
+    Join group update. This update notifies that a user has joined a group.
+    """
+    def __init__(self):
+        self.person_name = None
+        self.person_id = None
+        self.person_public_url = None
+        self.person_headline = None
+
+    @staticmethod
+    def create(xml_element):
+        update = JGRP()
+        person = xml_element.find("person")
+        update = create_person_attrs(update,person)
+        #TODO: NOT FINISHED
+        return update
+
+#TODO: PROF, QSTN, ANSW, APPM, APPS, PICU, PRFU, PRFX, PREC, SVPR, JOBP, CMPY, MSFC
 
 class Update(object):
     def __init__(self):
         self.timestamp = None
         self.is_commentable = None
+        self.is_likeable = None
+        self.is_liked = None
         self.update_type = None
+        self.update_key = None
         self.num_likes = None
         self.update = None
 
@@ -609,14 +687,27 @@ class Update(object):
     def create(xml_element,update_type):
         update = Update()
         update.update_type = update_type
-        update.timestamp = xml_element.find("timestamp").text
-        update.is_commentable = False if xml_element.find("is-commentable").text == 'false' else True
-        update.num_likes = "" if xml_element.find("num-likes") is None else xml_element.find("num-likes").text
+        update.update_key = get_child_xml(xml_element,"update-key")
+        update.timestamp = int(get_child_xml(xml_element,"timestamp"))
+        update.is_commentable = str_to_bool(get_child_xml(xml_element,"is-commentable"))
+        update.is_likeable = str_to_bool(get_child_xml(xml_element,"is-likeable"))
+        update.is_liked = str_to_bool(get_child_xml(xml_element,"is-liked"))
+        update.num_likes = get_child_xml(xml_element,"num-likes")
         content = xml_element.find("update-content")
         up = globals().get(update_type,None)
         if up is not None:
             update.update = up.create(content)
         return update
+
+    def get_source(self):
+        if self.update_type == "CONN":
+            return self.update.person1_id,self.update.person1_name
+        elif self.update_type in ("NCONN","CCEM","STAT","VIRL"):
+            return self.update.person_id,self.update.person_name
+        elif self.update_type == "SHAR":
+            return self.update.sharer_id,self.update.sharer_name
+        # this is a special case for update_types that are not yet implemented
+        return self.update_type,self.update_type
 
     def message(self):
         return str(self.update)

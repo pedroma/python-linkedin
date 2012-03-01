@@ -13,11 +13,8 @@ __version__ = "1.8.1"
 """
 Provides a Pure Python LinkedIn API Interface.
 """
-try:
-    import sha
-except DeprecationWarning, derr:
-    import hashlib
-    sha = hashlib.sha1
+import hashlib
+sha = hashlib.sha1
 
 import urllib, time, random, httplib, hmac, binascii, cgi, string
 from HTMLParser import HTMLParser
