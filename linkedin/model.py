@@ -1,5 +1,4 @@
 import datetime
-
 from xml.sax.saxutils import unescape
 
 def get_child(node, tagName,default=None):
@@ -649,7 +648,7 @@ class VIRL(object):
         return update
 
     def __str__(self):
-        return "VIRL update"
+        return self.update_share_comment
 
 
 class JGRP(object):
@@ -661,16 +660,93 @@ class JGRP(object):
         self.person_id = None
         self.person_public_url = None
         self.person_headline = None
+        self.group_id = None
+        self.group_name = None
+        self.group_request_url = None
 
     @staticmethod
     def create(xml_element):
         update = JGRP()
         person = xml_element.find("person")
         update = create_person_attrs(update,person)
-        #TODO: NOT FINISHED
+        member_group = get_child_xml(update.find("member-groups"),"member-group")
+        update.group_id = get_child_xml(member_group,"id")
+        update.group_name = get_child_xml(member_group,"name")
+        update.group_request_url = get_child_xml(member_group.find("url"),"site-group-request")
         return update
 
-#TODO: PROF, QSTN, ANSW, APPM, APPS, PICU, PRFU, PRFX, PREC, SVPR, JOBP, CMPY, MSFC
+    def __str__(self):
+        return "%s joined the group %s"%(self.person_name,self.group_name)
+
+class QSTN(object):
+    """
+    Question update.
+    "John Doe asked a question: 'What do people think of the new IAB Ts&Cs 3.0?'"
+
+    """
+    def __init__(self):
+        self.question_id = None
+        self.question_title = None
+        self.author_name = None
+        self.author_id = None
+        self.author_public_url = None
+        self.author_headline = None
+        self.categories = [] #format is [(code,name)]
+        self.question_web_url = None
+
+    @staticmethod
+    def create(xml_element):
+        update = QSTN()
+        question = get_child_xml(xml_element,"qestion")
+        update.question_id = get_child_xml(question,"id")
+        update.question_title = get_child_xml(question,"title")
+        author = get_child_xml(question,"author")
+        update = create_person_attrs(update,author,field="author")
+        update.author_distance_to_viewer = get_child_xml(author.find("relation-to-viewer"),"distance")
+        update.categories = [(get_child_xml(cat,"code"),get_child_xml(cat,"name")) for cat in get_child_xml(question,"question-categories")]
+        update.question_web_url = get_child_xml(question,"web-url")
+        return update
+
+    def __str__(self):
+        "%s asked a question: '%s'"%(self.author_name,self.question_title)
+
+
+class Answer(object):
+    def __init__(self):
+        self.answer_id = None
+        self.answer_web_url = None
+        self.author_name = None
+        self.author_id = None
+        self.author_public_url = None
+        self.author_headline = None
+
+    @staticmethod
+    def create(xml):
+        update = Answer()
+        update.answer_id = get_child_xml(xml,"id")
+        update.answer_web_url = get_child_xml(xml,"web-url")
+        author = get_child_xml(xml,"author")
+        update = create_person_attrs(update,author,field="author")
+        return update
+
+class ANSW(object):
+    """
+        Answer update.
+        "John Doe answered: 'How hard is it to develop an application using the LinkedIn API for this simple function'"
+    """
+    def __inti__(self):
+        self.question = None
+        self.answers = []
+
+    @staticmethod
+    def create(xml_element):
+        update = ANSW()
+        update.question = QSTN.create(xml_element)
+        question = get_child_xml(xml_element,"question")
+        update.answers = [Answer.create(answer) for answer in get_child_xml(question,"answers")]
+        return update
+
+#TODO:  APPM, APPS, PICU, PROF, PRFU, PRFX, PREC, SVPR, JOBP, CMPY, MSFC
 
 class Update(object):
     def __init__(self):
