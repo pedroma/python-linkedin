@@ -480,15 +480,15 @@ class CONN(object):
     def create(xml_element):
         update = CONN()
         content = xml_element.find("person")
-        update = create_person_attrs(update,content,field="person1")
-        update.connections = [Connection.create(person) for person in get_child_xml(xml_element,"connections")]
+        update = create_person_attrs(update,content)
+        update.connections = [Connection.create(person) for person in content.find("connections")]
         return update
 
     def __str__(self):
         conns = []
         for conn in self.connections:
             conns.append("<a href=\"%s\">%s</a>"%(conn.person_public_url,conn.person_name.encode('utf8')))
-        return "%s is now connected to %s" % (self.person_name.encode('utf8'),','.join(conns))
+        return "<a href=\"%s\">%s</a> is now connected to %s" % (self.person_public_url,self.person_name.encode('utf8'),','.join(conns))
 
 
 class NCON(object):
@@ -510,7 +510,7 @@ class NCON(object):
         return update
 
     def __str__(self):
-        return "%s is now a connection."%self.person_name.encode('utf8')
+        return "<a href=\"%s\">%s</a> is now a connection."%(self.person_public_url,self.person_name.encode('utf8'))
 
 class CCEM(object):
     """
@@ -531,7 +531,7 @@ class CCEM(object):
         return update
 
     def __str__(self):
-        return "%s has joined LinkedIn"%self.person_name.encode('utf8')
+        return "<a href=\"%s\">%s</a> has joined LinkedIn."%(self.person_public_url,self.person_name.encode('utf8'))
 
 class SHAR(object):
     """
@@ -575,7 +575,7 @@ class SHAR(object):
 
     def __str__(self):
         share = self.share_pic_url if self.share_pic_url != '' and self.share_pic_url is not None else self.share_content_url
-        return "%s shared %s. Originally shared by %s"%(self.sharer_name.encode('utf8'),share,self.original_sharer.encode('utf8'))
+        return "<a href=\"%s\">%s</a> shared %s. Originally shared by %s"%(self.sharer_public_url,self.sharer_name.encode('utf8'),share,self.original_sharer.encode('utf8'))
 
 class STAT(object):
     """
@@ -690,7 +690,7 @@ class JGRP(object):
         return update
 
     def __str__(self):
-        return "%s joined the group %s"%(self.person_name,self.group_name)
+        return "<a href=\"%s\">%s</a> joined the group %s"%(self.person_public_url, self.person_name,self.group_name)
 
 class QSTN(object):
     """
@@ -711,18 +711,18 @@ class QSTN(object):
     @staticmethod
     def create(xml_element):
         update = QSTN()
-        question = get_child_xml(xml_element,"qestion")
+        question = get_child_xml.find("qestion")
         update.question_id = get_child_xml(question,"id")
         update.question_title = get_child_xml(question,"title")
-        author = get_child_xml(question,"author")
+        author = question.find("author")
         update = create_person_attrs(update,author,field="author")
         update.author_distance_to_viewer = get_child_xml(author.find("relation-to-viewer"),"distance")
-        update.categories = [(get_child_xml(cat,"code"),get_child_xml(cat,"name")) for cat in get_child_xml(question,"question-categories")]
+        update.categories = [(get_child_xml(cat,"code"),get_child_xml(cat,"name")) for cat in question.find("question-categories")]
         update.question_web_url = get_child_xml(question,"web-url")
         return update
 
     def __str__(self):
-        "%s asked a question: '%s'"%(self.author_name,self.question_title)
+        return "<a href=\"%s\">%s</a> asked a question: '%s'"%(self.author_public_url,self.author_name,self.question_title)
 
 
 class Answer(object):
@@ -739,7 +739,7 @@ class Answer(object):
         update = Answer()
         update.answer_id = get_child_xml(xml,"id")
         update.answer_web_url = get_child_xml(xml,"web-url")
-        author = get_child_xml(xml,"author")
+        author = xml.find("author")
         update = create_person_attrs(update,author,field="author")
         return update
 
@@ -756,9 +756,12 @@ class ANSW(object):
     def create(xml_element):
         update = ANSW()
         update.question = QSTN.create(xml_element)
-        question = get_child_xml(xml_element,"question")
-        update.answers = [Answer.create(answer) for answer in get_child_xml(question,"answers")]
+        question = xml_element.fins("question")
+        update.answers = [Answer.create(answer) for answer in question.find("answers")]
         return update
+
+    def __str__(self):
+        return "<a href=\"%s\">%s</a> answered: '%s'"%(self.author_public_url,self.author_name,self.question_title)
 
 class Activity(object):
     def __init__(self):
@@ -787,10 +790,13 @@ class APPS(object):
     @staticmethod
     def create(xml_element):
         update = APPS()
-        person = get_child_xml(xml_element,"person")
+        person = xml_element.find("person")
         update = create_person_attrs(update,person)
-        update.activities = [Activity.create(activity) for activity in get_child_xml(person,"activities")]
+        update.activities = [Activity.create(activity) for activity in person.find("activities")]
         return update
+
+    def __str__(self):
+        return ','.join([act.body for act in self.activities])
 
 class APPM(APPS):
     """ completely the same as APPS """
@@ -810,12 +816,15 @@ class PICU(object):
     @staticmethod
     def create(xml_element):
         update = PICU()
-        person = get_child_xml(xml_element,"person")
+        person = xml_element.find("person")
         update = create_person_attrs(update,person)
         update.pic_url = get_child_xml(person,"picture-url")
         return update
 
-class Position(object):
+    def __str__(self):
+        return "<a href=\"%s\">%s</a> has a new profile picture <a href=\"%s\">%s</a>"%(self.person_public_url,self.person_name,self.pic_url,self.pic_url)
+
+class PositionUpd(object):
     def __init__(self):
         self.id = None
         self.title = None
@@ -829,7 +838,7 @@ class Position(object):
         update = Position()
         update.id = get_child_xml(xml,"id")
         update.title = get_child_xml(xml,"title")
-        company = get_child_xml(xml,"company")
+        company = xml.find("company")
         update.company_id = get_child_xml(company,"id")
         update.company_name = get_child_xml(company,"name")
         company_type = get_child_xml(company,"company-type")
@@ -851,10 +860,13 @@ class PROF(object):
     @staticmethod
     def create(xml_element):
         update = PROF()
-        person = get_child_xml(xml_element,"person")
+        person = xml_element.find("person")
         update = create_person_attrs(update,person)
-        update.positions = [Position.create(position) for position in get_child_xml(person,"positions",[])]
+        update.positions = [PositionUpd.create(position) for position in person.find("positions")]
         return update
+
+    def __str__(self):
+        return "<a href=\"%s\">%s</a> has an updated profile."%(self.person_public_url,self.person_name)
 
 class PRFX(object):
     """
@@ -871,11 +883,14 @@ class PRFX(object):
     @staticmethod
     def create(xml_element):
         update = PRFX()
-        person = get_child_xml(xml_element,"person")
+        person = xml_element.find("person")
         update = create_person_attrs(update,person)
         update.picture_url = get_child_xml(person,"picture-url")
-        update.twitter_accounts = [get_child_xml(t,"provider-account-name") for t in get_child_xml(person,"twitter-accounts",[])]
+        update.twitter_accounts = [get_child_xml(t,"provider-account-name") for t in person.find("twitter-accounts")]
         return update
+
+    def __str__(self):
+        return "<a href=\"%s\">%s</a> has updated his/hers extended profile data"%(self.person_public_url,self.person_name)
 
 #TODO:  PREC, SVPR, JOBP, CMPY, MSFC
 
@@ -893,8 +908,6 @@ class Update(object):
 
     @staticmethod
     def create(xml_element,update_type):
-        #from xml.etree.ElementTree import dump
-        #dump(xml_element)
         update = Update()
         update.update_type = update_type
         update.update_key = get_child_xml(xml_element,"update-key")
@@ -911,9 +924,7 @@ class Update(object):
         return update
 
     def get_source(self):
-        if self.update_type == "CONN":
-            return self.update.person1_id,self.update.person1_name
-        elif self.update_type in ("NCONN","CCEM","STAT","VIRL"):
+        if self.update_type in ("CONN","NCONN","CCEM","STAT","VIRL"):
             return self.update.person_id,self.update.person_name
         elif self.update_type == "SHAR":
             return self.update.sharer_id,self.update.sharer_name
@@ -921,6 +932,5 @@ class Update(object):
         return self.update_type,self.update_type
 
     def message(self):
-        return repr(self.update)
-
+        return str(self.update)
 
