@@ -451,32 +451,44 @@ def create_person_attrs(update,person,field="person"):
     setattr(update,"%s_headline"%field,headline)
     return update
 
+class Connection(object):
+    def __init__(self):
+        self.person_name = None # first name + last name
+        self.person_id = None
+        self.person_public_url = None
+        self.person_headline = None
+
+    @staticmethod
+    def create(xml):
+        update = Connection()
+        update = create_person_attrs(update,xml)
+        return update
+
 class CONN(object):
     """
     CONN updates contain a update-content/connections node that describe the member that was recently connected to. update-content/person indicates the first degree connection making the new connection.
     "John Irving is now connected to Paul Auster."
     """
     def __init__(self):
-        self.person1_name = None # first name + last name
-        self.person1_id = None
-        self.person1_public_url = None
-        self.person1_headline = None
-        self.person2_name = None
-        self.person2_id = None
-        self.person2_public_url = None
-        self.person2_headline = None
+        self.person_name = None # first name + last name
+        self.person_id = None
+        self.person_public_url = None
+        self.person_headline = None
+        self.connections = []
 
     @staticmethod
     def create(xml_element):
         update = CONN()
         content = xml_element.find("person")
         update = create_person_attrs(update,content,field="person1")
-        person2 = content.find("connections").find("person")
-        update = create_person_attrs(update,person2,field="person2")
+        update.connections = [Connection.create(person) for person in get_child_xml(xml_element,"connections")]
         return update
 
     def __str__(self):
-        return "%s is now connected to %s" % (self.person1_name.encode('utf8'),self.person2_name.encode('utf8'))
+        conns = []
+        for conn in self.connections:
+            conns.append("<a href=\"%s\">%s</a>"%(conn.person_public_url,conn.person_name.encode('utf8')))
+        return "%s is now connected to %s" % (self.person_name.encode('utf8'),','.join(conns))
 
 
 class NCON(object):
@@ -669,7 +681,9 @@ class JGRP(object):
         update = JGRP()
         person = xml_element.find("person")
         update = create_person_attrs(update,person)
-        member_group = get_child_xml(update.find("member-groups"),"member-group")
+        if update.person_id == "private": # this person information is private, no interest in showing it
+            return None
+        member_group = get_child_xml(person.find("member-groups"),"member-group")
         update.group_id = get_child_xml(member_group,"id")
         update.group_name = get_child_xml(member_group,"name")
         update.group_request_url = get_child_xml(member_group.find("url"),"site-group-request")
@@ -734,7 +748,7 @@ class ANSW(object):
         Answer update.
         "John Doe answered: 'How hard is it to develop an application using the LinkedIn API for this simple function'"
     """
-    def __inti__(self):
+    def __init__(self):
         self.question = None
         self.answers = []
 
@@ -746,7 +760,124 @@ class ANSW(object):
         update.answers = [Answer.create(answer) for answer in get_child_xml(question,"answers")]
         return update
 
-#TODO:  APPM, APPS, PICU, PROF, PRFU, PRFX, PREC, SVPR, JOBP, CMPY, MSFC
+class Activity(object):
+    def __init__(self):
+        self.body = None
+        self.app_id = None
+
+    @staticmethod
+    def create(xml):
+        update = Activity()
+        update.body = get_child_xml(xml,"body")
+        update.app_id = get_child_xml(xml,"app-id")
+        return update
+
+class APPS(object):
+    """
+        APP update.
+        &lt;a href="http://www.linkedin.com//profile?viewProfile=&amp;key=1234"&gt;John Irving&lt;/a&gt; is reading &lt;a
+    """
+    def __init__(self):
+        self.person_name = None
+        self.person_id = None
+        self.person_public_url = None
+        self.person_headline = None
+        self.activities = []
+
+    @staticmethod
+    def create(xml_element):
+        update = APPS()
+        person = get_child_xml(xml_element,"person")
+        update = create_person_attrs(update,person)
+        update.activities = [Activity.create(activity) for activity in get_child_xml(person,"activities")]
+        return update
+
+class APPM(APPS):
+    """ completely the same as APPS """
+
+class PICU(object):
+    """
+    Profile update
+    This kind of update indicates that a first degree connection has a new profile picture.
+    """
+    def __init__(self):
+        self.person_name = None
+        self.person_id = None
+        self.person_public_url = None
+        self.person_headline = None
+        self.pic_url = None
+
+    @staticmethod
+    def create(xml_element):
+        update = PICU()
+        person = get_child_xml(xml_element,"person")
+        update = create_person_attrs(update,person)
+        update.pic_url = get_child_xml(person,"picture-url")
+        return update
+
+class Position(object):
+    def __init__(self):
+        self.id = None
+        self.title = None
+        self.company_id = None
+        self.company_name = None
+        self.company_type_code = None
+        self.company_type_name = None
+
+    @staticmethod
+    def create(xml):
+        update = Position()
+        update.id = get_child_xml(xml,"id")
+        update.title = get_child_xml(xml,"title")
+        company = get_child_xml(xml,"company")
+        update.company_id = get_child_xml(company,"id")
+        update.company_name = get_child_xml(company,"name")
+        company_type = get_child_xml(company,"company-type")
+        update.company_type_code = get_child_xml(company_type,"code")
+        update.company_type_name = get_child_xml(company_type,"name")
+        return update
+
+class PROF(object):
+    """
+    PROF/PRFU profile update. Indicates when a first degree connection has updated their profile in some way.
+    """
+    def __init__(self):
+        self.person_name = None
+        self.person_id = None
+        self.person_public_url = None
+        self.person_headline = None
+        self.positions = []
+
+    @staticmethod
+    def create(xml_element):
+        update = PROF()
+        person = get_child_xml(xml_element,"person")
+        update = create_person_attrs(update,person)
+        update.positions = [Position.create(position) for position in get_child_xml(person,"positions",[])]
+        return update
+
+class PRFX(object):
+    """
+    Indicates that a first degree connection has updated their extended profile data.
+    """
+    def __init__(self):
+        self.person_name = None
+        self.person_id = None
+        self.person_public_url = None
+        self.person_headline = None
+        self.picture_url = None
+        self.twitter_accounts = []
+
+    @staticmethod
+    def create(xml_element):
+        update = PRFX()
+        person = get_child_xml(xml_element,"person")
+        update = create_person_attrs(update,person)
+        update.picture_url = get_child_xml(person,"picture-url")
+        update.twitter_accounts = [get_child_xml(t,"provider-account-name") for t in get_child_xml(person,"twitter-accounts",[])]
+        return update
+
+#TODO:  PREC, SVPR, JOBP, CMPY, MSFC
 
 class Update(object):
     def __init__(self):
@@ -757,10 +888,13 @@ class Update(object):
         self.update_type = None
         self.update_key = None
         self.num_likes = None
+        self.update_fields = []
         self.update = None
 
     @staticmethod
     def create(xml_element,update_type):
+        #from xml.etree.ElementTree import dump
+        #dump(xml_element)
         update = Update()
         update.update_type = update_type
         update.update_key = get_child_xml(xml_element,"update-key")
@@ -769,6 +903,7 @@ class Update(object):
         update.is_likeable = str_to_bool(get_child_xml(xml_element,"is-likeable"))
         update.is_liked = str_to_bool(get_child_xml(xml_element,"is-liked"))
         update.num_likes = get_child_xml(xml_element,"num-likes")
+        update.update_fields = [get_child_xml(field,"name") for field in get_child_xml(xml_element,"updated-fields",[])]
         content = xml_element.find("update-content")
         up = globals().get(update_type,None)
         if up is not None:
@@ -786,6 +921,6 @@ class Update(object):
         return self.update_type,self.update_type
 
     def message(self):
-        return str(self.update)
+        return repr(self.update)
 
 
