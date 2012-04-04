@@ -527,7 +527,7 @@ class CCEM(object):
     def create(xml_element):
         update = CCEM()
         content = xml_element.find("person")
-        update = create_person_attrs(update,content,field="person1")
+        update = create_person_attrs(update,content)
         return update
 
     def __str__(self):
@@ -892,7 +892,60 @@ class PRFX(object):
     def __str__(self):
         return "<a href=\"%s\">%s</a> has updated his/hers extended profile data"%(self.person_public_url,self.person_name)
 
-#TODO:  PREC, SVPR, JOBP, CMPY, MSFC
+class Recommendation(object):
+    """
+    a recommendation placeholder
+    """
+    def __init__(self):
+        self.recommendation_id = None
+        self.recommendation_type = None
+        self.recommendation_snippet = None
+        self.recommendee_name = None
+        self.recommendee_id = None
+        self.recommendee_public_url = None
+        self.recommendee_headline = None
+
+    @staticmethod
+    def create(xml):
+        update = Recommendation()
+        update.recommendation_id = get_child_xml(xml,"id")
+        update.recommendation_type = get_child_xml(xml.find("recommendation-type"),"code")
+        update.recommendation_snippet = get_child_xml(xml,"recommendation-snippet")
+        recommendee = xml.find("recommendee")
+        create_person_attrs(update,recommendee,field="recommendee")
+        return update
+
+class PREC(object):
+    """
+    "John Irving recommends Richard Brautigan: 'Richard is my favorite author...'"
+    """
+    def __init__(self):
+        self.person_name = None
+        self.person_id = None
+        self.person_public_url = None
+        self.person_headline = None
+        self.recommendations = []
+
+    @staticmethod
+    def create(xml_element):
+        update = PREC()
+        person = xml_element.find("person")
+        create_person_attrs(update,person)
+        update.recommendations = [Recommendation.create(recommendation) for recommendation in person.find("recommendations-given")]
+        return update
+
+    def __str__(self):
+        reco = []
+        for r in self.recommendations:
+            reco.append("<a href=\"%s\">%s</a> recommends <a href=\"%s\">%s</a>: %s"%(self.person_public_url,self.person_name,r.recommendee_public_url,r.recommendee_name,r.recommendation_snippet))
+        return '\n'.join(reco)
+
+class SVPR(PREC):
+    """
+    in essence its the same as PREC
+    """
+
+#TODO: JOBP, CMPY, MSFC
 
 class Update(object):
     def __init__(self):
@@ -924,7 +977,7 @@ class Update(object):
         return update
 
     def get_source(self):
-        if self.update_type in ("CONN","NCONN","CCEM","STAT","VIRL"):
+        if self.update_type in ("CONN","NCON","CCEM","STAT","VIRL","JGRP","APPS","APPM","PICU","PROF","PRFX","PREC","SVPR"):
             return self.update.person_id,self.update.person_name
         elif self.update_type == "SHAR":
             return self.update.sharer_id,self.update.sharer_name
