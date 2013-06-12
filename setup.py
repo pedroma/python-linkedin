@@ -2,12 +2,13 @@
 from distutils.core import setup
 
 setup(name = "python-linkedin",
-      version = "1.8.2",
+      version = "0.1",
       description = "Python Interface for the LinkedIn API",
-      author = "Ozgur Vatansever",
+      author = "Pedro Araujo",
       license = open("LICENSE").read(),
       long_description = open("README").read(),
-      author_email = "ozgurvt@gmail.com",
-      url = "http://code.google.com/p/python-linkedin/",
+      author_email = "pedromcaraujo@gmail.com",
+      url = "https://github.com/pedroma/python-linkedin",
       packages = ["linkedin"],
-      platforms = ["linux"])
+      platforms = ["linux"]
+)
